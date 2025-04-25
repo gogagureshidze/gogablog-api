@@ -52,7 +52,7 @@ const registerUser = async (req, res) => {
       throw Error("Username already taken!");
     }
 
-    const salt = bcrypt.genSaltSync(10);
+    const salt = bcrypt.genSaltSync(7);
     const hash = bcrypt.hashSync(password, salt);
 
     const newUser = new User({
@@ -183,7 +183,7 @@ const resetPassword = async (req, res) => {
   if (!validator.isStrongPassword(password)) {
     return res.status(400).json({ error: "Password is not strong enough!" });
   }
-  const salt = bcrypt.genSaltSync(15);
+  const salt = bcrypt.genSaltSync(7);
   const hash = bcrypt.hashSync(password, salt);
   try {
     jwt.verify(token, process.env.JWT_SECRET);
