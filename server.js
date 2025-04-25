@@ -10,6 +10,9 @@ const Post = require("./models/Post");
 const multer = require("multer");
 require("dotenv").config();
 
+
+
+
 const uploadMiddleware = multer({
   dest: "uploads/",
   limits: {
@@ -18,7 +21,12 @@ const uploadMiddleware = multer({
 });
 const fs = require("fs");
 
-app.use(cors());
+const corsOptions = {
+  origin: "https://gogagureshidze.github.io", // Allow frontend domain
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true,
+};
+app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(morgan("dev"));
 app.use(express.json({ limit: "5mb" })); // Adjust the limit as needed
