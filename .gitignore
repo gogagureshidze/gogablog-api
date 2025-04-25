@@ -9,7 +9,7 @@ logs
 *.log
 
 # Temporary files
-uploads/
+
 
 # MacOS
 .DS_Store
