@@ -24,7 +24,7 @@ app.use(morgan("dev"));
 app.use(express.json({ limit: "5mb" })); // Adjust the limit as needed
 app.use("/api/user", userRoutes);
 
-app.use("/uploads", express.static(__dirname + "/uploads"));
+app.use("/uploads", express.static("uploads"));
 
 // Get all posts endpoint
 app.get("/api/post", async (req, res) => {
