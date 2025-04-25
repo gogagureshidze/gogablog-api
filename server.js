@@ -10,9 +10,6 @@ const Post = require("./models/Post");
 const multer = require("multer");
 require("dotenv").config();
 
-
-
-
 const uploadMiddleware = multer({
   dest: "uploads/",
   limits: {
@@ -22,7 +19,10 @@ const uploadMiddleware = multer({
 const fs = require("fs");
 
 const corsOptions = {
-  origin: "https://gogagureshidze.github.io", // Allow frontend domain
+  origin: [
+    "https://gogagureshidze.github.io",
+    "https://gogagureshidze.github.io/gogablog-client",
+  ],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 };
