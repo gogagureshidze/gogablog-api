@@ -1,0 +1,28 @@
+# Node.js
+node_modules/
+
+# dotenv environment variables
+.env
+
+# Logs
+logs
+*.log
+
+# Temporary files
+uploads/
+
+# MacOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+# npm package lock file (if you prefer not to commit it)
+package-lock.json
+
+# IDE files
+.idea/
+
+# Build directories
+dist/
+build/
