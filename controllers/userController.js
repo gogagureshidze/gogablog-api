@@ -137,7 +137,7 @@ const forgotPassword = async (req, res) => {
       expiresIn: "15m",
     });
 
-    const link = `http://localhost:${process.env.FRONT_PORT}/api/reset-password/${user._id}/${token}`;
+    const link = `http://localhost:${3000}/api/reset-password/${user._id}/${token}`;
     console.log(link);
     await mail(user, link);
 
