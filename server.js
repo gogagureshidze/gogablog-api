@@ -22,6 +22,7 @@ const corsOptions = {
   origin: [
     "https://gogagureshidze.github.io",
     "https://gogagureshidze.github.io/gogablog-client",
+    "http://localhost:3000",
   ],
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
