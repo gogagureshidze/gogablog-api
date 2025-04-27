@@ -10,12 +10,26 @@ const Post = require("./models/Post");
 const multer = require("multer");
 require("dotenv").config();
 
-const uploadMiddleware = multer({
-  dest: "uploads/",
-  limits: {
-    fileSize: 5 * 1024 * 1024, // Increase the file size limit to 5 MB (adjust as needed)
+const cloudinary = require("cloudinary").v2;
+const { CloudinaryStorage } = require("multer-storage-cloudinary");
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+
+const storage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: 'gogablog', // Folder name inside Cloudinary
+    allowed_formats: ['jpg', 'jpeg', 'png'],
   },
 });
+
+const uploadMiddleware = multer({ storage });
+
 const fs = require("fs");
 
 const corsOptions = {
@@ -56,70 +70,62 @@ app.get("/api/post/:id", async (req, res) => {
 // Update post
 app.put("/api/post", uploadMiddleware.single("file"), async (req, res) => {
   const { id, title, summary, content } = req.body;
-  const updatedPost = {
-    title,
-    summary,
-    content,
-  };
+  const updatedPost = { title, summary, content };
 
   const authHeader = req.headers.authorization;
   const token = authHeader && authHeader.split(" ")[1];
-
-  if (!token) return res.status(401).json({ error: "No token provided" });
-  jwt.verify(token, process.env.JWT_SECRET, {}, async (err, info) => {
-    try {
-      if (req.file) {
-        const { path } = req.file;
-        const parts = req.file.originalname.split(".");
-        const ext = parts[parts.length - 1];
-        const newPath = path + "." + ext;
-        fs.renameSync(path, newPath);
-        updatedPost.cover = newPath;
-      }
-
-      const post = await Post.findByIdAndUpdate(id, updatedPost, { new: true });
-      if (!post) {
-        return res.status(404).json({ message: "Post not found" });
-      }
-      res.json(post);
-    } catch (error) {
-      console.error("Error updating post:", error);
-      res.status(500).json({ message: "Internal Server Error" });
-    }
-    if (err) {
-      res.status(500).json(err);
-      console.error("Error updating post:", err);
-    }
-  });
-});
-
-// Create a new post
-app.post("/api/post", uploadMiddleware.single("file"), async (req, res) => {
-  const { originalname, path } = req.file;
-  const parts = originalname.split(".");
-  const ext = parts[parts.length - 1];
-  const newPath = path + "." + ext;
-  fs.renameSync(path, newPath);
-
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(" ")[1]; // Extract token from "Bearer xxx"
-
   if (!token) return res.status(401).json({ error: "No token provided" });
 
   jwt.verify(token, process.env.JWT_SECRET, {}, async (err, info) => {
     if (err) return res.status(403).json({ error: "Invalid token" });
 
-    const { title, summary, content } = req.body;
-    console.log(info);
-    const postDoc = await Post.create({
-      title,
-      summary,
-      content,
-      cover: newPath,
-      author: info._id,
-    });
+    try {
+      if (req.file && req.file.path) {
+        updatedPost.cover = req.file.path; // ✅ Cloudinary URL
+      }
 
-    res.json(postDoc);
+      const post = await Post.findByIdAndUpdate(id, updatedPost, { new: true });
+      if (!post) return res.status(404).json({ message: "Post not found" });
+
+      res.json(post);
+    } catch (error) {
+      console.error("Error updating post:", error);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
+  });
+});
+
+
+// Create a new post
+app.post("/api/post", uploadMiddleware.single("file"), async (req, res) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.split(" ")[1];
+  if (!token) return res.status(401).json({ error: "No token provided" });
+
+  jwt.verify(token, process.env.JWT_SECRET, {}, async (err, info) => {
+    if (err) return res.status(403).json({ error: "Invalid token" });
+
+    try {
+      const { title, summary, content } = req.body;
+      let cover = "";
+
+      if (req.file && req.file.path) {
+        cover = req.file.path; // ✅ Cloudinary URL
+      }
+
+      const postDoc = await Post.create({
+        title,
+        summary,
+        content,
+        cover,
+        author: info._id,
+      });
+
+      res.json(postDoc);
+    } catch (error) {
+      console.error("Error creating post:", error);
+      res.status(500).json({ message: "Internal Server Error" });
+    }
   });
 });
 
