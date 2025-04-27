@@ -30,8 +30,6 @@ const storage = new CloudinaryStorage({
 
 const uploadMiddleware = multer({ storage });
 
-const fs = require("fs");
-
 const corsOptions = {
   origin: [
     "https://gogagureshidze.github.io",
