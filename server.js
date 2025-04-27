@@ -23,8 +23,8 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
-    folder: 'gogablog', // Folder name inside Cloudinary
-    allowed_formats: ['jpg', 'jpeg', 'png'],
+    folder: "gogablog", // Folder name inside Cloudinary
+    resource_type: "image",
   },
 });
 
