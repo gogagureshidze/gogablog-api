@@ -8,7 +8,18 @@ const PostSchema = new Schema(
     content: String,
     cover: String,
     author: { type: Schema.Types.ObjectId, ref: "User" },
+    comments: [
+      {
+        username: String,
+        text: String,
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
+
   {
     timestamps: true,
   }

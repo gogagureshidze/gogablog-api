@@ -19,7 +19,6 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-
 const storage = new CloudinaryStorage({
   cloudinary,
   params: {
@@ -27,7 +26,6 @@ const storage = new CloudinaryStorage({
     resource_type: "image",
   },
 });
-
 const uploadMiddleware = multer({ storage });
 
 const corsOptions = {
@@ -39,12 +37,12 @@ const corsOptions = {
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true,
 };
+
 app.use(cors(corsOptions));
 app.use(cookieParser());
 app.use(morgan("dev"));
 app.use(express.json({ limit: "5mb" })); // Adjust the limit as needed
 app.use("/api/user", userRoutes);
-
 app.use("/uploads", express.static("uploads"));
 
 // Get all posts endpoint
@@ -92,7 +90,6 @@ app.put("/api/post", uploadMiddleware.single("file"), async (req, res) => {
     }
   });
 });
-
 
 // Create a new post
 app.post("/api/post", uploadMiddleware.single("file"), async (req, res) => {
@@ -149,6 +146,87 @@ app.delete("/api/post/:id", async (req, res) => {
         console.log(err.message);
       });
   });
+});
+
+app.post("/api/post/:id/comment", async (req, res) => {
+  try {
+    const { username, text } = req.body;
+    const postId = req.params.id;
+
+    if (!username || !text) {
+      return res.status(400).json({ error: "Missing username or text" });
+    }
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    post.comments.push({ username, text });
+    await post.save();
+
+    res.status(201).json(post);
+  } catch (error) {
+    console.error("Error adding comment:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+app.delete("/api/post/:postId/comment/:commentId", async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    post.comments = post.comments.filter(
+      (comment) => comment._id.toString() !== commentId
+    );
+
+    await post.save();
+    res.status(200).json({ message: "Comment deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting comment:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+app.put("/api/post/:postId/comment/:commentId", async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+    const { text } = req.body; // New comment text
+
+    if (!text) {
+      return res
+        .status(400)
+        .json({ error: "Missing new text for the comment" });
+    }
+
+    const post = await Post.findById(postId);
+
+    if (!post) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+
+    // Find the specific comment
+    const comment = post.comments.id(commentId);
+
+    if (!comment) {
+      return res.status(404).json({ error: "Comment not found" });
+    }
+
+    // Update the comment text
+    comment.text = text;
+
+    // Save the updated post
+    await post.save();
+
+    res.status(200).json({ message: "Comment updated successfully", post });
+  } catch (error) {
+    console.error("Error editing comment:", error);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 });
 
 // MongoDB connection
