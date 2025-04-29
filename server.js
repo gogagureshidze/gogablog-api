@@ -9,7 +9,7 @@ const jwt = require("jsonwebtoken");
 const Post = require("./models/Post");
 const multer = require("multer");
 require("dotenv").config();
-
+const User = require("./models/User");
 const cloudinary = require("cloudinary").v2;
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 
@@ -242,3 +242,4 @@ mongoose
   .catch((err) => {
     console.log(err);
   });
+
