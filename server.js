@@ -12,19 +12,27 @@ require("dotenv").config();
 const User = require("./models/User");
 const cloudinary = require("cloudinary").v2;
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
-const corsOptions = {
-  // 1. Specify the EXACT origin of your frontend (no trailing slash)
-  origin: "http://localhost:3000",
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://gogagureshidze.github.io",
+];
 
-  // 2. Allow cookies/headers to pass through
-  credentials: true,
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // allow requests with no origin (like mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
 
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-};
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
+    credentials: true,
+  }),
+);
 
-
-app.use(cors(corsOptions)); // Pass the options here!
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -41,7 +49,6 @@ const storage = new CloudinaryStorage({
 const uploadMiddleware = multer({ storage });
 
 
-app.use(cors());
 app.use(cookieParser());
 app.use(morgan("dev"));
 app.use(express.json({ limit: "5mb" })); // Adjust the limit as needed
