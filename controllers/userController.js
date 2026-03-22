@@ -142,7 +142,7 @@ const forgotPassword = async (req, res) => {
     });
 
     // const link = `https://gogagureshidze.github.io/gogablog-client/#/api/reset-password/${user._id}/${token}`;
-     const link = `${FRONTEND_URL}/gogablog-client/#/api/reset-password/${user._id}/${token}`;
+const link = `${FRONT_URL}/#/api/reset-password/${user._id}/${token}`;
     console.log(link);
     await mail(user, link);
 
