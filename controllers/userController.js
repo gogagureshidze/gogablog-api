@@ -5,7 +5,11 @@ const jwt = require("jsonwebtoken");
 const { mail } = require("../smtp");
 
 const leo = require("leo-profanity")
+const isProd = process.env.NODE_ENV === "production";
 
+const FRONTEND_URL = isProd
+  ? "https://gogagureshidze.github.io/gogablog-client"
+  : "http://localhost:3000";
 const createToken = (_id) => {
   return jwt.sign({ _id }, process.env.JWT_SECRET, { expiresIn: "3d" });
 };
@@ -137,7 +141,8 @@ const forgotPassword = async (req, res) => {
       expiresIn: "15m",
     });
 
-    const link = `https://gogagureshidze.github.io/gogablog-client/#/api/reset-password/${user._id}/${token}`;
+    // const link = `https://gogagureshidze.github.io/gogablog-client/#/api/reset-password/${user._id}/${token}`;
+     const link = `${FRONTEND_URL}/gogablog-client/#/api/reset-password/${user._id}/${token}`;
     console.log(link);
     await mail(user, link);
 

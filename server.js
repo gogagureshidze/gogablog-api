@@ -12,7 +12,19 @@ require("dotenv").config();
 const User = require("./models/User");
 const cloudinary = require("cloudinary").v2;
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
+const corsOptions = {
+  // 1. Specify the EXACT origin of your frontend (no trailing slash)
+  origin: "http://localhost:3000",
 
+  // 2. Allow cookies/headers to pass through
+  credentials: true,
+
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
+
+
+app.use(cors(corsOptions)); // Pass the options here!
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -28,17 +40,8 @@ const storage = new CloudinaryStorage({
 });
 const uploadMiddleware = multer({ storage });
 
-const corsOptions = {
-  origin: [
-    "https://gogagureshidze.github.io",
-    "https://gogagureshidze.github.io/gogablog-client",
-    "http://localhost:3000",
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true,
-};
 
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(cookieParser());
 app.use(morgan("dev"));
 app.use(express.json({ limit: "5mb" })); // Adjust the limit as needed
@@ -51,7 +54,7 @@ app.get("/api/post", async (req, res) => {
     await Post.find()
       .populate("author", ["username"])
       .sort({ createdAt: -1 })
-      .limit(20)
+      .limit(20),
   );
 });
 
@@ -182,7 +185,7 @@ app.delete("/api/post/:postId/comment/:commentId", async (req, res) => {
     }
 
     post.comments = post.comments.filter(
-      (comment) => comment._id.toString() !== commentId
+      (comment) => comment._id.toString() !== commentId,
     );
 
     await post.save();
@@ -242,4 +245,3 @@ mongoose
   .catch((err) => {
     console.log(err);
   });
-
