@@ -56,8 +56,6 @@ app.use(express.json({ limit: "1mb" }));
 app.use("/api/user", userRoutes);
 
 // ── Generate signed upload signature ─────────────────────────────────────────
-// Browser calls this, gets a signature, then uploads DIRECTLY to Cloudinary.
-// Image bytes never touch your VPS.
 app.post("/api/upload-signature", async (req, res) => {
   try {
     await verifyToken(req);
@@ -76,7 +74,7 @@ app.post("/api/upload-signature", async (req, res) => {
       signature,
       timestamp,
       folder,
-      api_key: process.env.CLOUDINARY_API_KEY, // ← correct
+      api_key: process.env.CLOUDINARY_API_KEY,
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     });
   } catch (err) {
@@ -114,19 +112,28 @@ app.get("/api/post/:id", async (req, res) => {
 });
 
 // ── PUT update post ───────────────────────────────────────────────────────────
-// Body: { id, title, summary, content, cover? }
-// cover is a Cloudinary URL already uploaded by the browser — no multer needed
 app.put("/api/post", async (req, res) => {
   try {
-    await verifyToken(req);
+    const info = await verifyToken(req);
     const { id, title, summary, content, cover } = req.body;
+
+    const postDoc = await Post.findById(id);
+    if (!postDoc) return res.status(404).json({ error: "Post not found" });
+
+    const isAuthor =
+      JSON.stringify(postDoc.author) === JSON.stringify(info.id || info._id);
+    if (!isAuthor)
+      return res
+        .status(403)
+        .json({ error: "You are not the author of this post" });
 
     const update = { title, summary, content };
     if (cover) update.cover = cover;
 
-    const post = await Post.findByIdAndUpdate(id, update, { new: true }).lean();
-    if (!post) return res.status(404).json({ error: "Post not found" });
-    res.json(post);
+    const updatedPost = await Post.findByIdAndUpdate(id, update, {
+      new: true,
+    }).lean();
+    res.json(updatedPost);
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     console.error("PUT /api/post", err);
@@ -135,53 +142,50 @@ app.put("/api/post", async (req, res) => {
 });
 
 // ── POST create post ──────────────────────────────────────────────────────────
-// Body: { title, summary, content, cover? }
-// ── PUT update post ───────────────────────────────────────────────────────────
-app.put("/api/post", async (req, res) => {
+app.post("/api/post", async (req, res) => {
   try {
-    // 1. Get the user info from the token
-    const info = await verifyToken(req); 
-    const { id, title, summary, content, cover } = req.body;
+    const info = await verifyToken(req);
+    const { title, summary, content, cover } = req.body;
 
-    // 2. Find the post FIRST
-    const postDoc = await Post.findById(id);
-    if (!postDoc) return res.status(404).json({ error: "Post not found" });
+    if (!title || !summary || !content) {
+      return res
+        .status(400)
+        .json({ error: "title, summary, and content are required." });
+    }
 
-    // 3. SECURITY CHECK: Is this user the actual author?
-    // (We check info.id or info._id depending on how you signed your JWT)
-    const isAuthor = JSON.stringify(postDoc.author) === JSON.stringify(info.id || info._id);
-    if (!isAuthor) return res.status(403).json({ error: "You are not the author of this post" });
+    const postDoc = await Post.create({
+      title,
+      summary,
+      content,
+      cover: cover || "",
+      author: info.id || info._id,
+    });
 
-    // 4. Update the post
-    const update = { title, summary, content };
-    if (cover) update.cover = cover;
-
-    const updatedPost = await Post.findByIdAndUpdate(id, update, { new: true }).lean();
-    res.json(updatedPost);
-
+    res.status(201).json(postDoc);
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
-    console.error("PUT /api/post", err);
+    console.error("POST /api/post", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
 // ── DELETE post ───────────────────────────────────────────────────────────────
-// ── DELETE post ───────────────────────────────────────────────────────────────
 app.delete("/api/post/:id", async (req, res) => {
   try {
     const info = await verifyToken(req);
-    
+
     const postDoc = await Post.findById(req.params.id);
     if (!postDoc) return res.status(404).json({ error: "Post not found" });
 
-    // SECURITY CHECK: Is this user the actual author?
-    const isAuthor = JSON.stringify(postDoc.author) === JSON.stringify(info.id || info._id);
-    if (!isAuthor) return res.status(403).json({ error: "You are not the author of this post" });
+    const isAuthor =
+      JSON.stringify(postDoc.author) === JSON.stringify(info.id || info._id);
+    if (!isAuthor)
+      return res
+        .status(403)
+        .json({ error: "You are not the author of this post" });
 
     await Post.findByIdAndDelete(req.params.id);
     res.json({ message: "Deleted successfully" });
-
   } catch (err) {
     if (err.status) return res.status(err.status).json({ error: err.message });
     res.status(500).json({ error: "Internal Server Error" });
