@@ -7,9 +7,7 @@ const { mail } = require("../smtp");
 const leo = require("leo-profanity")
 const isProd = process.env.NODE_ENV === "production";
 
-const FRONTEND_URL = isProd
-  ? "https://gogagureshidze.github.io/gogablog-client"
-  : "http://localhost:3000";
+const FRONTEND_URL = "https://goga-blog.netlify.app"
 const createToken = (_id) => {
   return jwt.sign({ _id }, process.env.JWT_SECRET, { expiresIn: "3d" });
 };
@@ -142,7 +140,8 @@ const forgotPassword = async (req, res) => {
     });
 
     // const link = `https://gogagureshidze.github.io/gogablog-client/#/api/reset-password/${user._id}/${token}`;
-const link = `${FRONTEND_URL}/#/api/reset-password/${user._id}/${token}`;
+    // Old way
+    const link = `${FRONTEND_URL}/api/reset-password/${user._id}/${token}`;
     console.log(link);
     await mail(user, link);
 

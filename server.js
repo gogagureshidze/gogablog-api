@@ -14,7 +14,7 @@ const cloudinary = require("cloudinary").v2;
 const { CloudinaryStorage } = require("multer-storage-cloudinary");
 const allowedOrigins = [
   "http://localhost:3000",
-  "https://gogagureshidze.github.io",
+  "https://goga-blog.netlify.app",
 ];
 
 app.use(
@@ -87,7 +87,7 @@ app.put("/api/post", uploadMiddleware.single("file"), async (req, res) => {
 
     try {
       if (req.file && req.file.path) {
-        updatedPost.cover = req.file.path; // ✅ Cloudinary URL
+        updatedPost.cover = req.file.path; 
       }
 
       const post = await Post.findByIdAndUpdate(id, updatedPost, { new: true });
@@ -115,7 +115,7 @@ app.post("/api/post", uploadMiddleware.single("file"), async (req, res) => {
       let cover = "";
 
       if (req.file && req.file.path) {
-        cover = req.file.path; // ✅ Cloudinary URL
+        cover = req.file.path; 
       }
 
       const postDoc = await Post.create({
