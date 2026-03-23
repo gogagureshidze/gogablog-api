@@ -7,53 +7,16 @@ const cookieParser = require("cookie-parser");
 const userRoutes = require("./routes/user");
 const jwt = require("jsonwebtoken");
 const Post = require("./models/Post");
-const multer = require("multer");
-const sharp = require("sharp");
+const crypto = require("crypto");
 require("dotenv").config();
 const User = require("./models/User");
 const cloudinary = require("cloudinary").v2;
-const { Readable } = require("stream");
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
   "https://goga-blog.netlify.app",
 ];
-const ALLOWED_MIME_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-];
-const MAGIC_BYTES = {
-  ffd8ff: "image/jpeg",
-  "89504e47": "image/png",
-  47494638: "image/gif",
-  52494646: "image/webp",
-};
-const MAX_FILE_SIZE_BYTES = 8 * 1024 * 1024;
-const COVER_MAX_WIDTH = 1200;
-const COVER_MAX_HEIGHT = 800;
-const COVER_QUALITY = 80;
-
-// ─── Tiny timing helper ───────────────────────────────────────────────────────
-// Prints label + elapsed ms since the last tick() call.
-// Usage:  const tick = timer("PUT /api/post");
-//         tick("jwt verified");   →  [PUT /api/post] jwt verified — 3ms
-//         tick("db saved");       →  [PUT /api/post] db saved — 47ms
-//         tick.total();           →  [PUT /api/post] TOTAL — 52ms
-function timer(label) {
-  let last = Date.now();
-  const start = last;
-  const tick = (step) => {
-    const now = Date.now();
-    console.log(`  [${label}] ${step} — ${now - last}ms`);
-    last = now;
-  };
-  tick.total = () =>
-    console.log(`  [${label}] ✓ TOTAL — ${Date.now() - start}ms`);
-  return tick;
-}
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 app.use(
@@ -74,65 +37,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// ─── Multer — memory storage, strict limits ───────────────────────────────────
-const uploadMiddleware = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_FILE_SIZE_BYTES },
-  fileFilter(_req, file, cb) {
-    if (ALLOWED_MIME_TYPES.includes(file.mimetype)) return cb(null, true);
-    cb(
-      Object.assign(new Error(`Unsupported type: ${file.mimetype}`), {
-        code: "BAD_TYPE",
-      }),
-      false,
-    );
-  },
-});
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function hasValidMagicBytes(buffer) {
-  const hex = buffer.slice(0, 8).toString("hex");
-  return Object.keys(MAGIC_BYTES).some((m) => hex.startsWith(m));
-}
-
-function uploadBufferToCloudinary(buffer, folder = "gogablog") {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: "image", format: "webp" },
-      (error, result) => {
-        if (error) return reject(error);
-        resolve(result.secure_url);
-      },
-    );
-    Readable.from(buffer).pipe(stream);
-  });
-}
-
-async function processAndUpload(file, tick, folder = "gogablog") {
-  if (!hasValidMagicBytes(file.buffer)) {
-    throw Object.assign(
-      new Error("File content does not match a supported image."),
-      { status: 422 },
-    );
-  }
-
-  const processed = await sharp(file.buffer)
-    .rotate()
-    .resize(COVER_MAX_WIDTH, COVER_MAX_HEIGHT, {
-      fit: "inside",
-      withoutEnlargement: true,
-    })
-    .webp({ quality: COVER_QUALITY })
-    .toBuffer();
-
-  tick(`sharp done (${(processed.length / 1024).toFixed(0)} KB output)`);
-
-  const url = await uploadBufferToCloudinary(processed, folder);
-  tick("cloudinary upload done");
-
-  return url;
-}
-
+// ─── JWT helper ───────────────────────────────────────────────────────────────
 function verifyToken(req) {
   return new Promise((resolve, reject) => {
     const token = (req.headers.authorization || "").split(" ")[1];
@@ -150,27 +55,55 @@ function verifyToken(req) {
   });
 }
 
-// ─── Multer error handler ─────────────────────────────────────────────────────
-function handleUploadError(err, _req, res, next) {
-  if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE")
-    return res
-      .status(413)
-      .json({
-        error: `Max file size is ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB.`,
-      });
-  if (err?.code === "BAD_TYPE")
-    return res
-      .status(415)
-      .json({ error: err.message + " — allowed: JPEG, PNG, WebP, GIF." });
-  if (err?.status === 422) return res.status(422).json({ error: err.message });
-  next(err);
-}
-
 // ─── Middleware ───────────────────────────────────────────────────────────────
 app.use(cookieParser());
 app.use(morgan("dev"));
 app.use(express.json({ limit: "1mb" }));
 app.use("/api/user", userRoutes);
+
+// ─── NEW: Generate a signed Cloudinary upload signature ───────────────────────
+// The browser calls this first, gets a short-lived signature,
+// then uploads the image DIRECTLY to Cloudinary — your VPS never handles image bytes.
+//
+// POST /api/upload-signature
+// Returns: { signature, timestamp, api_key, cloud_name, folder }
+app.post("/api/upload-signature", async (req, res) => {
+  try {
+    await verifyToken(req);
+
+    const timestamp = Math.round(Date.now() / 1000);
+    const folder = "gogablog";
+
+    // Parameters that must be signed — must match exactly what the browser sends
+    const paramsToSign = {
+      folder,
+      timestamp,
+      // Restrict what can be uploaded: images only, max 8 MB
+      // These are Cloudinary upload parameters enforced server-side
+      allowed_formats: "jpg,jpeg,png,webp,gif",
+      max_file_size: 8388608, // 8 MB in bytes
+    };
+
+    const signature = cloudinary.utils.api_sign_request(
+      paramsToSign,
+      process.env.CLOUDINARY_API_SECRET,
+    );
+
+    res.json({
+      signature,
+      timestamp,
+      folder,
+      api_key: process.env.CLOUDINARY_CLOUD_NAME, // not a secret
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      allowed_formats: paramsToSign.allowed_formats,
+      max_file_size: paramsToSign.max_file_size,
+    });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error("upload-signature error:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 // ─── GET all posts ────────────────────────────────────────────────────────────
 app.get("/api/post", async (_req, res) => {
@@ -202,100 +135,57 @@ app.get("/api/post/:id", async (req, res) => {
 });
 
 // ─── PUT update post ──────────────────────────────────────────────────────────
-app.put(
-  "/api/post",
-  uploadMiddleware.single("file"),
-  handleUploadError,
-  async (req, res) => {
-    const tick = timer("PUT /api/post");
-    try {
-      await verifyToken(req);
-      tick("jwt verified");
+// No multer — the browser already uploaded the image to Cloudinary.
+// The request body just contains { id, title, summary, content, cover? }
+// where cover is already a Cloudinary URL the browser got back directly.
+app.put("/api/post", async (req, res) => {
+  try {
+    await verifyToken(req);
+    const { id, title, summary, content, cover } = req.body;
 
-      const { id, title, summary, content } = req.body;
+    const update = { title, summary, content };
+    // Only update cover if a new URL was provided
+    if (cover) update.cover = cover;
 
-      // ── TEXT-ONLY: no file → instant DB update ────────────────────────────
-      if (!req.file) {
-        const post = await Post.findByIdAndUpdate(
-          id,
-          { title, summary, content },
-          { new: true },
-        ).lean();
-        tick("db updated");
-        if (!post) return res.status(404).json({ error: "Post not found" });
-        tick.total();
-        return res.json(post);
-      }
+    const post = await Post.findByIdAndUpdate(id, update, { new: true }).lean();
+    if (!post) return res.status(404).json({ error: "Post not found" });
 
-      // ── WITH IMAGE ────────────────────────────────────────────────────────
-      tick(
-        `file received (${(req.file.buffer.length / 1024).toFixed(0)} KB raw)`,
-      );
-      const coverUrl = await processAndUpload(req.file, tick);
-
-      const post = await Post.findByIdAndUpdate(
-        id,
-        { title, summary, content, cover: coverUrl },
-        { new: true },
-      ).lean();
-      tick("db updated");
-
-      if (!post) return res.status(404).json({ error: "Post not found" });
-      tick.total();
-      res.json(post);
-    } catch (err) {
-      if (err.status)
-        return res.status(err.status).json({ error: err.message });
-      console.error("PUT /api/post error:", err);
-      res.status(500).json({ error: "Internal Server Error" });
-    }
-  },
-);
+    res.json(post);
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error("PUT /api/post", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 // ─── POST create post ─────────────────────────────────────────────────────────
-app.post(
-  "/api/post",
-  uploadMiddleware.single("file"),
-  handleUploadError,
-  async (req, res) => {
-    const tick = timer("POST /api/post");
-    try {
-      const info = await verifyToken(req);
-      tick("jwt verified");
+// Same pattern — cover is a Cloudinary URL already uploaded by the browser.
+app.post("/api/post", async (req, res) => {
+  try {
+    const info = await verifyToken(req);
+    const { title, summary, content, cover } = req.body;
 
-      const { title, summary, content } = req.body;
-      if (!title || !summary || !content) {
-        return res
-          .status(400)
-          .json({ error: "title, summary, and content are required." });
-      }
-
-      let cover = "";
-      if (req.file) {
-        tick(
-          `file received (${(req.file.buffer.length / 1024).toFixed(0)} KB raw)`,
-        );
-        cover = await processAndUpload(req.file, tick);
-      }
-
-      const postDoc = await Post.create({
-        title,
-        summary,
-        content,
-        cover,
-        author: info._id,
-      });
-      tick("db created");
-      tick.total();
-      res.status(201).json(postDoc);
-    } catch (err) {
-      if (err.status)
-        return res.status(err.status).json({ error: err.message });
-      console.error("POST /api/post error:", err);
-      res.status(500).json({ error: "Internal Server Error" });
+    if (!title || !summary || !content) {
+      return res
+        .status(400)
+        .json({ error: "title, summary, and content are required." });
     }
-  },
-);
+
+    const postDoc = await Post.create({
+      title,
+      summary,
+      content,
+      cover: cover || "",
+      author: info._id,
+    });
+
+    res.status(201).json(postDoc);
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error("POST /api/post", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
 
 // ─── DELETE post ──────────────────────────────────────────────────────────────
 app.delete("/api/post/:id", async (req, res) => {
