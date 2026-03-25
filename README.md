@@ -25,8 +25,8 @@ The backend core for **Goga Blog**, a robust and modern blogging platform. This 
 
 1.  **Clone the repository:**
     ```bash
-    git clone https://github.com/your-username/goga-blog-api.git
-    cd goga-blog-api/server
+    git clone https://github.com/gogagureshidze/gogablog-api.git
+    cd gogablog-api/server
     ```
 
 2.  **Install dependencies:**
